@@ -194,7 +194,7 @@ class ModuleReloader:
             use_cython (bool): Whether to create and use a Cython version of the module
         """
         # If the module is already registered, their is no need to register it again with some exceptions
-        if module_name not in sys.modules:
+        if module_name in sys.modules:
             print(f"Module already registered as {module_name}" +" (no need to register again)")
             importlib.reload(module_name)
         else:
