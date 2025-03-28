@@ -12,18 +12,8 @@ import os
 from datetime import datetime
 import hashlib
 
-import python_module.module_thread_template
+import module_thread_template
 
-#import import_test1
-
-### Load lib dynamic
-""" import importlib.util
-import sys
-spec = importlib.util.spec_from_file_location("module.name", "/path/to/file.py")
-foo = importlib.util.module_from_spec(spec)
-sys.modules["module.name"] = foo
-spec.loader.exec_module(foo)
-foo.MyClass() """
 
 class ModuleReloader:
     """
@@ -203,68 +193,73 @@ class ModuleReloader:
             custom_path (Optional[str]): Custom path to add to sys.path for module import
             use_cython (bool): Whether to create and use a Cython version of the module
         """
-        if custom_path and custom_path not in sys.path:
-            self.module_path[module_name] = custom_path
-            sys.path.append(custom_path)
-            
-            try:
-                spec = importlib.util.spec_from_file_location(module_name, custom_path)
-                foo = importlib.util.module_from_spec(spec)
-                sys.modules[module_name] = foo
-                spec.loader.exec_module(foo)
+        # If the module is already registered, their is no need to register it again with some exceptions
+        if module_name not in sys.modules:
+            print(f"Module already registered as {module_name}" +" (no need to register again)")
+            importlib.reload(module_name)
+        else:
+            if custom_path and custom_path not in sys.path:
+                self.module_path[module_name] = custom_path
+                sys.path.append(custom_path)
                 
-                # Create backup only after successful import
-                if os.path.exists(custom_path):
-                    self._create_backup(module_name, custom_path)
+                try:
+                    spec = importlib.util.spec_from_file_location(module_name, custom_path)
+                    foo = importlib.util.module_from_spec(spec)
+                    sys.modules[module_name] = foo
+                    spec.loader.exec_module(foo)
                     
-                    # Create Cython version if requested
-                    if use_cython:
-                        if self._create_cython_version(module_name, custom_path):
-                            # Try to import the Cython version
-                            try:
-                                # first remove "old" module befor loading the new one.
-                                del sys.modules[module_name]
-                                cython_module = importlib.import_module(module_name)
-                                sys.modules[module_name] = cython_module
-                                foo = cython_module
-                                print(f"Using Cython version of {module_name}")
-                            except ImportError as e:
-                                print(f"Failed to import Cython version: {str(e)}")
-                                print("Falling back to Python version")
-                    
-            except Exception as e:
-                print(f"Error loading module from custom path: {str(e)}")
-                print("Attempting to load from backup...")
-                backup_module = self._load_from_backup(module_name)
-                if backup_module:
-                    sys.modules[module_name] = backup_module
-                    foo = backup_module
-                else:
-                    print(f"Failed to load module {module_name} from both source and backup")
-                    return
-            
-        if module_name not in self._loaded_modules:
-            try:
-                # Import the module
-                module = importlib.import_module(module_name)
-                self._loaded_modules[module_name] = module
-                self._module_dependencies[module_name] = self._get_module_dependencies(module)
-                # Make module globally available if not already in sys.modules
-                if module_name not in sys.modules:
-                    sys.modules[module_name] = module
-                print(f"Successfully registered module: {module_name}")
-            except ImportError as e:
-                print(f"Error registering module {module_name}: {str(e)}")
-                print("Attempting to load from backup...")
-                backup_module = self._load_from_backup(module_name)
-                if backup_module:
-                    self._loaded_modules[module_name] = backup_module
-                    self._module_dependencies[module_name] = self._get_module_dependencies(backup_module)
-                    if module_name not in sys.modules:
+                    # Create backup only after successful import
+                    if os.path.exists(custom_path):
+                        self._create_backup(module_name, custom_path)
+                        
+                        # Create Cython version if requested
+                        if use_cython:
+                            if self._create_cython_version(module_name, custom_path):
+                                # Try to import the Cython version
+                                try:
+                                    # first remove "old" module befor loading the new one.
+                                    del sys.modules[module_name]
+                                    cython_module = importlib.import_module(module_name)
+                                    sys.modules[module_name] = cython_module
+                                    foo = cython_module
+                                    print(f"Using Cython version of {module_name}")
+                                except ImportError as e:
+                                    print(f"Failed to import Cython version: {str(e)}")
+                                    print("Falling back to Python version")
+                        
+                except Exception as e:
+                    print(f"Error loading module from custom path: {str(e)}")
+                    print("Attempting to load from backup...")
+                    backup_module = self._load_from_backup(module_name)
+                    if backup_module:
                         sys.modules[module_name] = backup_module
-                    print(f"Successfully loaded module {module_name} from backup")
-                else:
-                    print(f"Failed to load module {module_name} from both source and backup")
+                        foo = backup_module
+                    else:
+                        print(f"Failed to load module {module_name} from both source and backup")
+                        return
+                
+            if module_name not in self._loaded_modules:
+                try:
+                    # Import the module
+                    module = importlib.import_module(module_name)
+                    self._loaded_modules[module_name] = module
+                    self._module_dependencies[module_name] = self._get_module_dependencies(module)
+                    # Make module globally available if not already in sys.modules
+                    if module_name not in sys.modules:
+                        sys.modules[module_name] = module
+                    print(f"Successfully registered module: {module_name}")
+                except ImportError as e:
+                    print(f"Error registering module {module_name}: {str(e)}")
+                    print("Attempting to load from backup...")
+                    backup_module = self._load_from_backup(module_name)
+                    if backup_module:
+                        self._loaded_modules[module_name] = backup_module
+                        self._module_dependencies[module_name] = self._get_module_dependencies(backup_module)
+                        if module_name not in sys.modules:
+                            sys.modules[module_name] = backup_module
+                        print(f"Successfully loaded module {module_name} from backup")
+                    else:
+                        print(f"Failed to load module {module_name} from both source and backup")
     
     def reload_module(self, module_name: str) -> None:
         """
@@ -394,7 +389,7 @@ class ModuleReloader:
             module = self._loaded_modules[module_name]
             target_func = getattr(module, target_function)
             
-            thread = python_module.module_thread_template.ThreadTemplate(target=target_func,*args,**kwargs)
+            thread = module_thread_template.ThreadTemplate(target=target_func,*args,**kwargs)
             thread.start()
             self._module_threads[module_name] = thread
             
@@ -496,21 +491,3 @@ if __name__ == "__main__":
     result = reloader.load_module_function("test1", "test1", a="test parameter")
     print(f"Test2 function result: {result}")    
     
-    """ # Example 3: Error handling example
-    print("\nExample 3: Error handling")
-    result = reloader.load_module_function("nonexistent_module", "nonexistent_function")
-    print(f"Error case result: {result}")
-    
-    # Original thread example
-    reloader.start_module_thread(module_name="test1",target_function="test1",a="works good")
-    time.sleep(2)
-    reloader.reload_module("test1")
-    print("after") """
-    
-    #print (reloader.get_module_by_name("numpy").array([4,5,6]))
-    #print (sys.modules["numpy"].array([1,2,3]))
-    
-    
-    
-    # Reload all registered modules
-    #reloader.reload_all() 
